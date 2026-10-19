@@ -1,0 +1,4 @@
+project_id = "barbearia-la"
+
+[functions.send-reminders]
+verify_jwt = false
