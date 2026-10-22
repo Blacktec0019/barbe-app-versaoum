@@ -49,6 +49,7 @@ create table public.appointments (
   cancel_token uuid not null default gen_random_uuid(),
   reminded_at timestamptz,
   created_at timestamptz not null default now(),
+  user_id uuid references auth.users(id),
   check (ends_at > starts_at),
   -- o banco impede dois horários sobrepostos para o mesmo barbeiro
   constraint no_overlap exclude using gist (
@@ -62,6 +63,16 @@ create index appointments_token_idx on public.appointments (cancel_token);
 
 -- Quem pode entrar no painel
 create table public.admins (email text primary key);
+
+-- Cadastro do cliente (login com Google)
+create table public.profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  name text not null default '',
+  phone text not null default '',
+  email text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
 
 create or replace function public.is_admin()
 returns boolean
@@ -79,9 +90,10 @@ alter table public.barbers enable row level security;
 alter table public.working_hours enable row level security;
 alter table public.appointments enable row level security;
 alter table public.admins enable row level security;
+alter table public.profiles enable row level security;
 
 revoke all on public.services, public.barbers, public.working_hours,
-  public.appointments, public.admins from anon, authenticated;
+  public.appointments, public.admins, public.profiles from anon, authenticated;
 
 -- visitantes só leem o catálogo (e do barbeiro, só id e nome)
 grant select on public.services, public.working_hours to anon;
@@ -110,6 +122,34 @@ create policy appointments_admin on public.appointments for all to authenticated
 
 -- barbers: o admin precisa ler email e whatsapp também
 grant select (email, whatsapp) on public.barbers to authenticated;
+grant select, insert, update on public.profiles to authenticated;
+
+create policy profiles_own_select on public.profiles
+  for select to authenticated using (id = auth.uid());
+create policy profiles_own_insert on public.profiles
+  for insert to authenticated with check (id = auth.uid());
+create policy profiles_own_update on public.profiles
+  for update to authenticated using (id = auth.uid()) with check (id = auth.uid());
+
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.profiles (id, name, email)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', ''),
+    new.email
+  )
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute procedure public.handle_new_user();
 
 -- ---------------------------------------------------------------- funções
 
@@ -140,7 +180,8 @@ $$;
 -- Só a Edge Function (service_role) chama esta função.
 create or replace function public.book_appointment(
   p_barber uuid, p_service uuid, p_starts timestamptz,
-  p_name text, p_phone text, p_email text, p_notes text default null
+  p_name text, p_phone text, p_email text, p_notes text default null,
+  p_user uuid default null
 ) returns public.appointments
 language plpgsql security definer set search_path = public as $$
 declare
@@ -184,9 +225,9 @@ begin
   end if;
 
   insert into public.appointments
-    (barber_id, service_id, client_name, client_phone, client_email, notes, starts_at, ends_at)
+    (barber_id, service_id, client_name, client_phone, client_email, notes, starts_at, ends_at, user_id)
   values
-    (p_barber, p_service, p_name, p_phone, p_email, p_notes, p_starts, v_ends)
+    (p_barber, p_service, p_name, p_phone, p_email, p_notes, p_starts, v_ends, p_user)
   returning * into v_row;
 
   return v_row;
@@ -211,9 +252,9 @@ begin
 end;
 $$;
 
-revoke execute on function public.book_appointment(uuid, uuid, timestamptz, text, text, text, text)
+revoke execute on function public.book_appointment(uuid, uuid, timestamptz, text, text, text, text, uuid)
   from public, anon, authenticated;
-grant execute on function public.book_appointment(uuid, uuid, timestamptz, text, text, text, text)
+grant execute on function public.book_appointment(uuid, uuid, timestamptz, text, text, text, text, uuid)
   to service_role;
 
 revoke execute on function public.cancel_by_token(uuid) from public, anon, authenticated;

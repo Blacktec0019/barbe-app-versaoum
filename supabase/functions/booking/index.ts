@@ -47,9 +47,21 @@ async function details(a: Record<string, any>) {
   return { d, barberEmail: barber?.email || Deno.env.get('SHOP_EMAIL') };
 }
 
-async function book(body: Record<string, any>) {
+async function userFrom(req: Request) {
+  const raw = req.headers.get('Authorization') || '';
+  const jwt = raw.replace(/^Bearer\s+/i, '').trim();
+  if (!jwt) return null;
+  const { data, error } = await db.auth.getUser(jwt);
+  if (error || !data.user?.email) return null;
+  return data.user;
+}
+
+async function book(body: Record<string, any>, req: Request) {
+  const user = await userFrom(req);
+  if (!user) return json({ error: 'nao_autenticado' }, 401);
+
   const name = String(body.name ?? '').trim();
-  const email = String(body.email ?? '').trim().toLowerCase();
+  const email = String(user.email).trim().toLowerCase();
   let phone = String(body.phone ?? '').replace(/\D/g, '');
   const notes = String(body.notes ?? '').trim().slice(0, 200) || null;
   if (phone.length === 10 || phone.length === 11) phone = `55${phone}`;
@@ -70,6 +82,7 @@ async function book(body: Record<string, any>) {
     p_phone: phone,
     p_email: email,
     p_notes: notes,
+    p_user: user.id,
   });
   if (error) return rpcError(error.message);
 
@@ -107,7 +120,7 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   try {
     const body = await req.json();
-    return body.action === 'cancel' ? await cancel(body) : await book(body);
+    return body.action === 'cancel' ? await cancel(body) : await book(body, req);
   } catch (e) {
     console.error(e);
     return json({ error: 'erro_interno' }, 500);

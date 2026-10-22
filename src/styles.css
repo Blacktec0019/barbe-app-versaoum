@@ -318,6 +318,123 @@ code { background: var(--wash); padding: 1px 6px; border-radius: 4px; }
 }
 .acts { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 8px; }
 
+/* ------------------------------------------- cadastro / Google */
+.join { margin-top: 18px; }
+.join-card {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 100% 0%, #1d1a15 0%, transparent 50%),
+    var(--ink);
+  color: #fff;
+  border: 1px solid var(--gold);
+  border-radius: var(--r);
+  padding: 28px 22px 24px 26px;
+  box-shadow: var(--shadow);
+}
+.join-card h2 { color: #fff; margin-top: 0; }
+.join-card-light {
+  background: var(--card);
+  color: var(--ink);
+  border-color: var(--line);
+}
+.join-card-light h2 { color: var(--ink); }
+.join-pole {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--pole-red) 0 8px,
+    #fff 8px 16px,
+    var(--pole-blue) 16px 24px,
+    #fff 24px 32px
+  );
+}
+.join-eyebrow {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+.join-card-light .join-eyebrow { color: var(--gold-deep); }
+.join-lead {
+  margin: 0 0 18px;
+  color: #cfc6b6;
+  font-size: 15px;
+  line-height: 1.55;
+}
+.join-lead.dark { color: var(--smoke); }
+.join-perks {
+  list-style: none;
+  margin: 0 0 22px;
+  padding: 0;
+}
+.join-perks li {
+  position: relative;
+  padding: 8px 0 8px 26px;
+  font-size: 14px;
+  color: #f5f2ec;
+  border-bottom: 1px solid rgba(184, 146, 74, .2);
+}
+.join-perks li:last-child { border-bottom: 0; }
+.join-perks li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 14px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--gold);
+}
+.btn-google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: #fff;
+  color: var(--ink);
+  border-color: #fff;
+  letter-spacing: .08em;
+}
+.btn-google:hover:not(:disabled) {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: var(--ink);
+}
+.google-mark { flex: none; }
+.join-note {
+  margin: 14px 0 0;
+  color: #9a9184;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.join-quote {
+  margin: 18px 2px 0;
+  color: var(--smoke);
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 15px;
+}
+.account {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--smoke);
+}
+.form input[readonly] {
+  background: var(--wash);
+  color: var(--smoke);
+}
+
 /* ------------------------------------------------------- entrada suave */
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 section, .sum, .notice { animation: rise .4s ease backwards; }

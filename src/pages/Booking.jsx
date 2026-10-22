@@ -19,7 +19,7 @@ const gcalLink = (startsAt, minutes, title) => {
   return `https://calendar.google.com/calendar/render?${q}`;
 };
 
-export default function Booking() {
+export default function Booking({ session, profile }) {
   const [catalog, setCatalog] = useState(null);
   const [loadError, setLoadError] = useState('');
   const [step, setStep] = useState(0);
@@ -29,7 +29,12 @@ export default function Booking() {
   const [slot, setSlot] = useState(null);
   const [busy, setBusy] = useState(null);
   const [refresh, setRefresh] = useState(0);
-  const [form, setForm] = useState({ name: '', phone: '', email: '', notes: '' });
+  const [form, setForm] = useState({
+    name: profile?.name || '',
+    phone: profile?.phone || '',
+    email: profile?.email || session?.user?.email || '',
+    notes: '',
+  });
   const [errors, setErrors] = useState({});
   const [sending, setSending] = useState(false);
   const [submitError, setSubmitError] = useState('');
@@ -101,7 +106,6 @@ export default function Booking() {
     if (form.name.trim().length < 2) e.name = 'Informe seu nome.';
     const ph = digits(form.phone);
     if (ph.length < 10 || ph.length > 13) e.phone = 'Informe o WhatsApp com DDD.';
-    if (!/^\S+@\S+\.\S+$/.test(form.email.trim())) e.email = 'Informe um e-mail válido.';
     return e;
   }
 
@@ -120,9 +124,16 @@ export default function Booking() {
         starts_at: slot.startsAt,
         name: form.name.trim(),
         phone: form.phone,
-        email: form.email.trim(),
         notes: form.notes.trim(),
       });
+      if (session?.user?.id) {
+        await supabase.from('profiles').upsert({
+          id: session.user.id,
+          name: form.name.trim(),
+          phone: digits(form.phone),
+          email: session.user.email,
+        }, { onConflict: 'id' });
+      }
       setDone(res);
     } catch (err) {
       setSubmitError(errorMessage(err.message));
@@ -140,7 +151,12 @@ export default function Booking() {
     setService(null);
     setSlot(null);
     setStep(0);
-    setForm({ name: '', phone: '', email: '', notes: '' });
+    setForm({
+      name: profile?.name || form.name,
+      phone: profile?.phone || form.phone,
+      email: profile?.email || session?.user?.email || '',
+      notes: '',
+    });
     setRefresh((n) => n + 1);
   }
 
@@ -163,7 +179,7 @@ export default function Booking() {
         <Pole progress={100} steps={steps} step={steps.length - 1} />
         <h2>Horário reservado</h2>
         {summary}
-        {done.emailSent && <p className="muted">Enviamos a confirmação para <b>{form.email.trim()}</b>.</p>}
+        {done.emailSent && <p className="muted">Enviamos a confirmação para <b>{session?.user?.email}</b>.</p>}
         <div className="stack">
           {hasWa && <a className="btn" href={waLink(SHOP.whatsapp, msg)} target="_blank" rel="noreferrer">Avisar a barbearia no WhatsApp</a>}
           <a className="btn ghost" href={gcalLink(slot.startsAt, service.duration_min, `${service.name} na ${SHOP.name}`)} target="_blank" rel="noreferrer">Adicionar ao Google Agenda</a>
@@ -176,6 +192,10 @@ export default function Booking() {
 
   return (
     <>
+      <div className="account">
+        <span>Olá, {form.name.split(' ')[0] || 'cliente'}</span>
+        <button className="link" type="button" onClick={() => supabase.auth.signOut()}>Sair</button>
+      </div>
       <Pole progress={progress} steps={steps} step={step} />
       {step > 0 && <button className="link back" onClick={() => setStep(step - 1)}>Voltar</button>}
 
@@ -278,9 +298,8 @@ export default function Booking() {
               {errors.phone && <span className="error">{errors.phone}</span>}
             </label>
             <label>
-              E-mail
-              <input type="email" value={form.email} onChange={setField('email')} autoComplete="email" />
-              {errors.email && <span className="error">{errors.email}</span>}
+              E-mail (conta Google)
+              <input type="email" value={session?.user?.email || ''} readOnly />
             </label>
             <label>
               Observação (opcional)

@@ -19,6 +19,7 @@ const MESSAGES = {
   fora_do_expediente: 'Esse horário está fora do expediente.',
   intervalo: 'Esse horário cai no intervalo da barbearia.',
   limite_agendamentos: 'Você já tem 3 agendamentos em aberto com esse e-mail.',
+  nao_autenticado: 'Entre com o Google para confirmar o agendamento.',
   dados_invalidos: 'Confira seus dados e tente de novo.',
   nao_cancelavel: 'Esse agendamento não pode mais ser cancelado por aqui. Fale com a barbearia.',
 };
