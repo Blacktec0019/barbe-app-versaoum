@@ -4,12 +4,37 @@ import { SHOP } from '../config.js';
 import { brl, todayStr, addDays, weekdayOf, nowMinutes, WEEKDAYS_SHORT, fmtTime, fmtDayLong, digits, waLink } from '../lib/format.js';
 import { buildSlots } from '../lib/slots.js';
 import { callBooking, errorMessage } from '../lib/api.js';
+import '../booking-extra.css';
 
 const PERIODS = [
   ['Manhã', (h) => h < 12],
   ['Tarde', (h) => h >= 12 && h < 18],
   ['Noite', (h) => h >= 18],
 ];
+
+// Planos mensais (preço em centavos). O botão abre o WhatsApp da barbearia.
+const PLANS = [
+  { id: 'completo', icon: '👑', tone: 'gold', name: 'Cabelo, barba e sobrancelha', price: 20000 },
+  { id: 'cabelo', icon: '🏆', tone: 'silver', name: 'Cabelo e sobrancelha', price: 13000 },
+  { id: 'barba', icon: '🥉', tone: 'bronze', name: 'Somente barba', price: 10000 },
+];
+
+const MAX_SERVICES = 8;
+
+const minLabel = (m) => {
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  return r ? `${h}h${String(r).padStart(2, '0')}` : `${h}h`;
+};
+
+const priceLabel = (s) => (s.price_cents > 0 ? brl(s.price_cents) : 'Consulte');
+
+const totalOf = (list) => ({
+  price: list.reduce((n, s) => n + s.price_cents, 0),
+  minutes: list.reduce((n, s) => n + s.duration_min, 0),
+  consult: list.some((s) => s.price_cents === 0),
+});
 
 const gcalLink = (startsAt, minutes, title) => {
   const f = (d) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
@@ -23,7 +48,7 @@ export default function Booking({ session, profile }) {
   const [catalog, setCatalog] = useState(null);
   const [loadError, setLoadError] = useState('');
   const [step, setStep] = useState(0);
-  const [service, setService] = useState(null);
+  const [chosen, setChosen] = useState([]); // ids dos serviços, na ordem do clique
   const [barber, setBarber] = useState(null);
   const [date, setDate] = useState(null);
   const [slot, setSlot] = useState(null);
@@ -45,8 +70,8 @@ export default function Booking({ session, profile }) {
   useEffect(() => {
     (async () => {
       const [s, b, h] = await Promise.all([
-        supabase.from('services').select('id,name,description,price_cents,duration_min').eq('active', true).order('sort'),
-        supabase.from('barbers').select('id,name').eq('active', true).order('sort'),
+        supabase.from('services').select('id,name,description,price_cents,duration_min,category').eq('active', true).order('sort'),
+        supabase.from('barbers').select('id,name,photo_url').eq('active', true).order('sort'),
         supabase.from('working_hours').select('*'),
       ]);
       if (s.error || b.error || h.error) {
@@ -78,17 +103,23 @@ export default function Booking({ session, profile }) {
     return () => { alive = false; };
   }, [barber, date, refresh]);
 
+  const picked = useMemo(
+    () => (catalog ? chosen.map((id) => catalog.services.find((s) => s.id === id)).filter(Boolean) : []),
+    [catalog, chosen],
+  );
+  const total = useMemo(() => totalOf(picked), [picked]);
+
   const slots = useMemo(() => {
-    if (!catalog || !service || !date || busy === null) return [];
+    if (!catalog || !picked.length || !date || busy === null) return [];
     return buildSlots({
       date,
       hours: catalog.hours[weekdayOf(date)],
-      durationMin: service.duration_min,
+      durationMin: total.minutes,
       busy,
       stepMin: SHOP.slotStepMin,
       minNoticeMin: SHOP.minNoticeMin,
     });
-  }, [catalog, service, date, busy]);
+  }, [catalog, picked, total, date, busy]);
 
   if (loadError) return <div className="notice"><p>{loadError}</p></div>;
   if (!catalog) return <p className="muted">Carregando…</p>;
@@ -98,8 +129,31 @@ export default function Booking({ session, profile }) {
   const current = steps[step];
   const progress = done ? 100 : ((step + 1) / steps.length) * 100;
   const timeStep = steps.indexOf('Horário');
+  const hasWa = digits(SHOP.whatsapp).length >= 12;
+  const namesText = picked.map((s) => s.name).join(' + ');
+  const totalText = `${brl(total.price)}${total.consult ? ' + a combinar' : ''}`;
+
+  const groups = [];
+  for (const s of catalog.services) {
+    const key = s.category || 'Cortes';
+    let g = groups.find((x) => x.name === key);
+    if (!g) {
+      g = { name: key, items: [] };
+      groups.push(g);
+    }
+    g.items.push(s);
+  }
 
   const setField = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  function toggleService(id) {
+    setChosen((c) => {
+      if (c.includes(id)) return c.filter((x) => x !== id);
+      if (c.length >= MAX_SERVICES) return c;
+      return [...c, id];
+    });
+    setSlot(null);
+  }
 
   function validate() {
     const e = {};
@@ -120,7 +174,7 @@ export default function Booking({ session, profile }) {
       const res = await callBooking({
         action: 'book',
         barber_id: barber.id,
-        service_id: service.id,
+        service_ids: picked.map((s) => s.id),
         starts_at: slot.startsAt,
         name: form.name.trim(),
         phone: form.phone,
@@ -148,7 +202,7 @@ export default function Booking({ session, profile }) {
 
   function reset() {
     setDone(null);
-    setService(null);
+    setChosen([]);
     setSlot(null);
     setStep(0);
     setForm({
@@ -160,20 +214,27 @@ export default function Booking({ session, profile }) {
     setRefresh((n) => n + 1);
   }
 
-  const summary = service && barber && slot && (
+  const summary = picked.length > 0 && barber && slot && (
     <div className="sum">
-      <div className="sum-top">
-        <strong>{service.name}</strong>
-        <span>{brl(service.price_cents)}</span>
-      </div>
+      {picked.map((s) => (
+        <div key={s.id} className="sum-top">
+          <span>{s.name}</span>
+          <span>{priceLabel(s)}</span>
+        </div>
+      ))}
+      {picked.length > 1 && (
+        <div className="sum-top">
+          <strong>Total</strong>
+          <strong>{totalText}</strong>
+        </div>
+      )}
       <div>com {barber.name}</div>
-      <div>{fmtDayLong(slot.startsAt)}, {fmtTime(slot.startsAt)}</div>
+      <div>{fmtDayLong(slot.startsAt)}, {fmtTime(slot.startsAt)} ({minLabel(total.minutes)})</div>
     </div>
   );
 
   if (done) {
-    const hasWa = digits(SHOP.whatsapp).length >= 12;
-    const msg = `Oi! Agendei ${service.name} com ${barber.name} para ${fmtDayLong(slot.startsAt)}, ${fmtTime(slot.startsAt)}. Meu nome é ${form.name.trim()}.`;
+    const msg = `Oi! Agendei ${namesText} com ${barber.name} para ${fmtDayLong(slot.startsAt)}, ${fmtTime(slot.startsAt)}. Meu nome é ${form.name.trim()}.`;
     return (
       <>
         <Pole progress={100} steps={steps} step={steps.length - 1} />
@@ -182,7 +243,7 @@ export default function Booking({ session, profile }) {
         {done.emailSent && <p className="muted">Enviamos a confirmação para <b>{session?.user?.email}</b>.</p>}
         <div className="stack">
           {hasWa && <a className="btn" href={waLink(SHOP.whatsapp, msg)} target="_blank" rel="noreferrer">Avisar a barbearia no WhatsApp</a>}
-          <a className="btn ghost" href={gcalLink(slot.startsAt, service.duration_min, `${service.name} na ${SHOP.name}`)} target="_blank" rel="noreferrer">Adicionar ao Google Agenda</a>
+          <a className="btn ghost" href={gcalLink(slot.startsAt, total.minutes, `${namesText} na ${SHOP.name}`)} target="_blank" rel="noreferrer">Adicionar ao Google Agenda</a>
           <a className="link" href={`#/cancelar/${done.appointment.cancel_token}`}>Preciso cancelar</a>
           <button className="link" onClick={reset}>Fazer outro agendamento</button>
         </div>
@@ -201,23 +262,74 @@ export default function Booking({ session, profile }) {
 
       {current === 'Serviço' && (
         <section>
-          <h2>Qual serviço?</h2>
-          <div className="stack">
-            {catalog.services.map((s) => (
-              <button
-                key={s.id}
-                className="opt"
-                aria-pressed={service?.id === s.id}
-                onClick={() => { setService(s); setSlot(null); setStep(1); }}
-              >
-                <span>
-                  <strong>{s.name}</strong>
-                  {s.description && <small>{s.description}</small>}
-                  <small>{s.duration_min} min</small>
-                </span>
-                <strong>{brl(s.price_cents)}</strong>
-              </button>
-            ))}
+          <h2>Quais serviços?</h2>
+          <p className="muted">Pode marcar mais de um. Todos ficam no mesmo horário.</p>
+
+          {groups.map((g) => (
+            <div key={g.name} className="cat">
+              <h3>{g.name}</h3>
+              <div className="stack">
+                {g.items.map((s) => {
+                  const on = chosen.includes(s.id);
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      className="opt"
+                      aria-pressed={on}
+                      onClick={() => toggleService(s.id)}
+                    >
+                      <span className="opt-main">
+                        <span className="tick" aria-hidden="true">{on ? '✓' : ''}</span>
+                        <span>
+                          <strong>{s.name}</strong>
+                          {s.description && <small>{s.description}</small>}
+                          <small>{minLabel(s.duration_min)}</small>
+                        </span>
+                      </span>
+                      <strong>{priceLabel(s)}</strong>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+          <div className="plans">
+            <h3>Plano mensal</h3>
+            <p className="muted">Toque no plano para combinar com a barbearia pelo WhatsApp.</p>
+            <div className="plan-list">
+              {PLANS.map((p) => (
+                <a
+                  key={p.id}
+                  className={`plan plan-${p.tone}`}
+                  href={hasWa ? waLink(SHOP.whatsapp, `Oi! Quero o plano mensal: ${p.name} (${brl(p.price)}).`) : undefined}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <span className="plan-ico" aria-hidden="true">{p.icon}</span>
+                  <span className="plan-name">{p.name}</span>
+                  <span className="plan-price">{brl(p.price)}<small>/mês</small></span>
+                </a>
+              ))}
+            </div>
+          </div>
+
+          <div className="cart">
+            <div className="cart-info">
+              {picked.length === 0 ? (
+                <span>Escolha pelo menos um serviço</span>
+              ) : (
+                <>
+                  <strong>{picked.length} {picked.length === 1 ? 'serviço' : 'serviços'}</strong>
+                  <span>{totalText}</span>
+                  <span>{minLabel(total.minutes)}</span>
+                </>
+              )}
+            </div>
+            <button className="btn" type="button" disabled={!picked.length} onClick={() => setStep(step + 1)}>
+              Continuar
+            </button>
           </div>
         </section>
       )}
@@ -225,14 +337,18 @@ export default function Booking({ session, profile }) {
       {current === 'Barbeiro' && (
         <section>
           <h2>Com quem?</h2>
-          <div className="stack">
+          <div className="pros">
             {catalog.barbers.map((b) => (
               <button
                 key={b.id}
-                className="opt"
+                type="button"
+                className="pro"
                 aria-pressed={barber?.id === b.id}
                 onClick={() => { setBarber(b); setSlot(null); setStep(step + 1); }}
               >
+                {b.photo_url
+                  ? <img className="pro-photo" src={b.photo_url} alt="" width="88" height="88" />
+                  : <span className="pro-photo pro-initial">{b.name.slice(0, 1)}</span>}
                 <strong>{b.name}</strong>
               </button>
             ))}

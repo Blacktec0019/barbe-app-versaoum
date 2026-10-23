@@ -1,0 +1,137 @@
+/* Serviços com seleção múltipla, plano mensal e barbeiros com foto.
+   Usa as cores do tema (--gold e --gold-deep) quando existirem. */
+
+.cat { margin-top: 22px; }
+.cat h3,
+.plans h3 {
+  margin: 0 0 10px;
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 20px;
+  letter-spacing: 0.02em;
+}
+
+/* caixinha de marcar dentro de cada serviço */
+.opt-main { display: flex; align-items: flex-start; gap: 12px; text-align: left; }
+.tick {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-top: 2px;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid var(--gold-deep, #8c6a2a);
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  color: #0b0b0b;
+}
+.opt[aria-pressed='true'] .tick {
+  background: var(--gold, #b8924a);
+  border-color: var(--gold, #b8924a);
+}
+
+/* barra fixa com o total e o botão Continuar */
+.cart {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 24px;
+  padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+  background: #0b0b0b;
+  color: #f5f2ec;
+  border-top: 2px solid var(--gold, #b8924a);
+  border-radius: 6px 6px 0 0;
+}
+.cart-info { display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
+.cart-info strong { font-size: 15px; }
+.cart .btn {
+  margin: 0;
+  white-space: nowrap;
+  background: var(--gold, #b8924a);
+  border-color: var(--gold, #b8924a);
+  color: #0b0b0b;
+}
+.cart .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* plano mensal: três botões pretos com letras douradas */
+.plans { margin-top: 32px; }
+.plan-list { display: grid; gap: 10px; margin-top: 12px; }
+.plan {
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 6px;
+  color: #d9b66b;
+  text-decoration: none;
+  background: #0b0b0b;
+  border: 1.5px solid #b8924a;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.plan:hover {
+  transform: translateY(-1px);
+  background: #161616;
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.4);
+}
+.plan:focus-visible { outline: 3px solid #b8924a; outline-offset: 3px; }
+.plan-ico { font-size: 28px; line-height: 1; text-align: center; }
+/* a taça sai prateada: o emoji 🏆 é dourado, então tiramos a cor */
+.plan-silver .plan-ico {
+  filter: grayscale(1) brightness(1.4) contrast(1.05);
+}
+.plan-name { font-weight: 600; font-size: 15px; line-height: 1.25; }
+.plan-price {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 20px;
+  font-weight: 700;
+  white-space: nowrap;
+  text-align: right;
+}
+.plan-price small { margin-left: 2px; font-family: inherit; font-size: 12px; font-weight: 500; }
+
+/* barbeiros com foto redonda */
+.pros { display: flex; flex-wrap: wrap; justify-content: center; gap: 22px 26px; margin-top: 16px; }
+.pro {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 4px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.pro-photo {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #1a1a1a;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.12);
+  transition: box-shadow 0.15s ease;
+}
+.pro-initial {
+  display: grid;
+  place-items: center;
+  color: #f5f2ec;
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 34px;
+}
+.pro:hover .pro-photo,
+.pro[aria-pressed='true'] .pro-photo { box-shadow: 0 0 0 3px var(--gold, #b8924a); }
+.pro:focus-visible .pro-photo { outline: 3px solid var(--gold-deep, #8c6a2a); outline-offset: 3px; }
+.pro[aria-pressed='true'] strong { color: var(--gold-deep, #8c6a2a); }
+
+@media (prefers-reduced-motion: reduce) {
+  .plan, .pro-photo { transition: none; }
+  .plan:hover { transform: none; }
+}
